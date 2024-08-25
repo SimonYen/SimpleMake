@@ -106,6 +106,7 @@ name = "simple_make"
 version = "0.1.0"
 dependencies = [
  "ansi_rgb",
+ "serde",
  "toml",
 ]
 
