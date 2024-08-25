@@ -4,7 +4,7 @@
 
 use ansi_rgb::{ red,green,Background };
 use std::process::Command;
-use crate::config::Project;
+use crate::config::{Mode, Project};
 
 struct OneLineCommand{
     data:String,
@@ -33,5 +33,13 @@ pub struct AllCommand{
 impl AllCommand {
     pub fn new(project:&Project)->AllCommand{
         //这个构造函数实现很重要，需要慢慢写
+        let mut all_command=AllCommand{cmds:Vec::<OneLineCommand>::new()};
+        match project.get_mode() {
+            //编译为静态库时
+            Mode::Static=>{
+                
+            }
+        }
+        all_command
     }
 }

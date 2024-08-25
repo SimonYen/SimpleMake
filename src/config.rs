@@ -36,7 +36,6 @@ pub struct Complier{
 pub enum Mode {
     Static,
     Dynamic,
-    Null,
     Invalid,
 }
 
@@ -50,23 +49,32 @@ impl Project {
     }
     //获取编译模式
     pub fn get_mode(&self)->Mode{
-        return match self.target.mode.as_str() {
+        match self.target.mode.as_str() {
             "sta"=>{
                 Mode::Static
             },
             "dyn"=>{
                 Mode::Dynamic
             },
-            "null"=>{
-                Mode::Null
-            },
             _=>{
                 Mode::Invalid
             },
-        };
+        }
     }
     //检查c++标准是否正确
     pub fn check_std(&self)->bool{
-        
+        match self.complier.std {
+            98|11|14|17|20=>{
+                true
+            },
+            _=>{false},
+        }
+    }
+    //检查代码优化等级是否正确
+    pub fn check_ol(&self)->bool{
+        match self.complier.ol {
+            0..=3=>{true},
+            _=>{false},
+        }
     }
 }

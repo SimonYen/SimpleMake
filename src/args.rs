@@ -21,8 +21,8 @@ inc="inc"
 src="src"
 #Cpp file that contained main function
 entrance="main.cpp"
-#Supported Library type:static(sta),dynamic(dyn),null
-mode="null"
+#Supported Library type:static(sta),dynamic(dyn)
+mode="sta"
 #Library output directory
 lib="lib"
 #Execute output directory
