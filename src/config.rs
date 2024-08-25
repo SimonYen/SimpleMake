@@ -32,10 +32,41 @@ pub struct Complier{
     pub extra:Vec<String>,
 }
 
+//编译模式
+pub enum Mode {
+    Static,
+    Dynamic,
+    Null,
+    Invalid,
+}
+
+
+
 impl Project {
     pub fn new(config_path:&PathBuf)->Project{
         //读取文件内容
         let content=read_to_string(config_path).unwrap();
         return toml::from_str(&content).unwrap();
+    }
+    //获取编译模式
+    pub fn get_mode(&self)->Mode{
+        return match self.target.mode.as_str() {
+            "sta"=>{
+                Mode::Static
+            },
+            "dyn"=>{
+                Mode::Dynamic
+            },
+            "null"=>{
+                Mode::Null
+            },
+            _=>{
+                Mode::Invalid
+            },
+        };
+    }
+    //检查c++标准是否正确
+    pub fn check_std(&self)->bool{
+        
     }
 }
