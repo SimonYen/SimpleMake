@@ -66,6 +66,7 @@ pub fn read_console_input(){
             //调用新建项目函数
             create_new_project(project_name);
         },
+        "init"=>{init_existed_project();},
         "help"=>{print_help_infomation();},
         _=>{
             println!("{}","Unspported arguments!".bg(red()));
@@ -122,4 +123,16 @@ fn create_new_project(project_name:&String){
             println!("Error:{}",e);
         }
     }
+}
+
+//初始化一个已经存在的项目
+fn init_existed_project(){
+    //首先获取当前目录
+    let mut current_path=env::current_dir().expect("Can't get current dir!");
+    //拼接
+    current_path.push("project.toml");
+    //写入
+    let mut file=File::create(current_path).unwrap();
+    file.write_all(PROJECT_TXT.as_bytes()).unwrap();
+    println!("Creating {} successfully.","project.toml".bg(green()));
 }
