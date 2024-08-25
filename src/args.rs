@@ -16,17 +16,17 @@ const  PROJECT_TXT:&str=r#"
 [target]
 name="demo"
 #Include file directory
-inc="./inc"
+inc="inc"
 #Source file 
-src="./src"
+src="src"
 #Cpp file that contained main function
-main="main.cpp"
+entrance="main.cpp"
 #Supported Library type:static(sta),dynamic(dyn),null
-type="null"
+mode="null"
 #Library output directory
-lib="./lib"
+lib="lib"
 #Execute output directory
-bin="./bin"
+bin="bin"
 
 [complier]
 #Supported C++ complier:g++ clang++
@@ -37,10 +37,10 @@ std=11
 wall=true
 #Setting Optimization Level(0,1,2,3)
 ol=1
-#Linking extra system library(e.g. liba+libb)
-link=""
+#Linking extra system library(e.g. ["liba","libb"])
+link=[]
 #Adding more arguments
-extra=""
+extra=[]
 "#;
 
 
