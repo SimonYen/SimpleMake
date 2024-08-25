@@ -1,0 +1,13 @@
+[package]
+name = "simple_make"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+toml = "0.8.19"
+ansi_rgb = "0.2.0"
+
+
+[[bin]]
+name = "sm"
+path = "src/main.rs"
