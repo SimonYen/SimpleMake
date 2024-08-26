@@ -1,8 +1,9 @@
+use std::env;
 /*
 主要负责把project.toml里面的内容给读出来
 */
 use std::path::PathBuf;
-use std::fs::read_to_string;
+use std::fs::{read_dir, read_to_string};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -76,5 +77,40 @@ impl Project {
             0..=3=>{true},
             _=>{false},
         }
+    }
+    //递归遍历函数
+    fn visit_dirs(&self,dir:&PathBuf,src_files:&mut Vec<PathBuf>){
+        //递归退出条件
+        if dir.is_file() {
+            //收集c++源文件
+            match dir.extension() {
+                Some(s)=>{
+                    if s=="cxx" || s=="cpp" || s=="hpp" {
+                        //添加到数组
+                        src_files.push(dir.to_path_buf())
+                    }
+                },
+                None=>{}
+            }
+            return;
+        }
+        //递归遍历
+        for d in read_dir(dir).expect("Can't read dir!"){
+            match d {
+                Ok(p)=>{
+                    self.visit_dirs(&p.path(), src_files);
+                },
+                _=>{}
+            }
+        }
+    }
+    //获取需要编译的源文件数组
+    pub fn get_src_files(&self)->Vec<PathBuf>{
+        let mut result:Vec<PathBuf>=Vec::new();
+        //获取当前目录
+        let mut current_path=env::current_dir().unwrap();
+        current_path.push(self.target.src.clone());
+        self.visit_dirs(&current_path, &mut result);
+        result
     }
 }
