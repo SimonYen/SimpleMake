@@ -84,7 +84,7 @@ impl Project {
                 Some(s) => {
                     if s == "cxx" || s == "cpp" || s == "hpp" {
                         //添加到数组
-                        src_files.push(dir.to_path_buf())
+                        src_files.push(dir.to_path_buf());
                     }
                 }
                 None => {}
