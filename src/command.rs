@@ -54,7 +54,7 @@ impl AllCommand {
         let src_files = project.get_src_files();
         current_path.push(".sm");
         //0.创建.sm文件夹
-        match fs::metadata(current_path) {
+        match fs::metadata(current_path.clone()) {
             Ok(metadata) => {
                 if metadata.is_file() {
                     panic!("A file named .sm!");
@@ -62,7 +62,7 @@ impl AllCommand {
             }
             Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
                 // 目录不存在，创建它
-                fs::create_dir(current_path).unwrap();
+                fs::create_dir(current_path.clone()).unwrap();
             }
             Err(e) => {
                 // 处理其他错误
@@ -92,8 +92,60 @@ impl AllCommand {
                     current_path.pop();
                     current_path.pop();
                 }
+                //2.收集所有目标文件
+                current_path.push(".sm");
+                let mut obj_files: Vec<String> = Vec::new();
+                for entry in fs::read_dir(current_path.clone()).unwrap() {
+                    //如果是文件
+                    match entry {
+                        Ok(en) => {
+                            if en.path().is_file() {
+                                //记录文件路径
+                                let obj_file = en.path();
+                                //这里日后要修改，毕竟要支持多系统
+                                if obj_file.extension().unwrap() == "o" {
+                                    obj_files.push(obj_file.to_str().unwrap().to_string());
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                current_path.pop();
+                current_path.push(project.target.lib.clone());
+                //3.打包成静态库
+                let mut ar_cmd = format!(
+                    "ar rcs {}/lib{}.a ",
+                    current_path.to_str().unwrap(),
+                    project.target.name
+                );
+                for obj_file in obj_files {
+                    ar_cmd.push_str(&obj_file);
+                    ar_cmd.push(' ');
+                }
+                all_command.cmds.push(OneLineCommand::new(ar_cmd));
+                current_path.pop();
+                current_path.push(project.target.bin.clone());
+                //4.编译二进制文件
+                let complie_cmd = format!(
+                    "{} -std=c++{} -O{} {} -o {}/{} -L{} -l{}",
+                    project.complier.cxx,
+                    project.complier.std,
+                    project.complier.ol,
+                    project.target.entrance,
+                    current_path.to_str().unwrap().to_string(),
+                    project.target.name,
+                    project.target.lib,
+                    project.target.name,
+                );
+                all_command.cmds.push(OneLineCommand::new(complie_cmd));
+            },
+            Mode::Dynamic=>{},
+            Mode::Invalid=>{
+                panic!("Unsupported mode!");
             }
         }
         all_command
     }
+
 }
