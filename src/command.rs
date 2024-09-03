@@ -3,25 +3,39 @@
 */
 
 use crate::config::{Mode, Project};
-use ansi_rgb::{green, red, Background};
+use ansi_rgb::{blue, green, green_cyan, red, Background};
 use std::{fs, io, process::Command};
 
 struct OneLineCommand {
-    data: String,
+    meta_data: String,
+    bin: String,
+    args: Vec<String>,
 }
 
 impl OneLineCommand {
     fn new(data: String) -> OneLineCommand {
-        return OneLineCommand { data };
+        //分解成为程序和参数
+        let words: Vec<String> = data
+            .split_ascii_whitespace()
+            .map(|w| w.to_string())
+            .collect();
+        return OneLineCommand {
+            meta_data: data,
+            bin: words[0].clone(),
+            args: words[1..].to_vec(),
+        };
     }
     //执行命令
     fn execute(&self) {
-        let output = Command::new(&self.data).output().expect(
-            format!("Failed to execute {}", &self.data)
-                .bg(red())
-                .to_string()
-                .as_str(),
-        );
+        let output = Command::new(&self.bin)
+            .args(self.args.clone())
+            .output()
+            .expect(
+                format!("Excuting {} Failed", self.meta_data)
+                    .bg(red())
+                    .to_string()
+                    .as_str(),
+            );
         // 将输出转换为字符串并打印
         let result = String::from_utf8_lossy(&output.stdout);
         println!("{}", result.bg(green()));
@@ -128,7 +142,7 @@ impl AllCommand {
                 current_path.push(project.target.bin.clone());
                 //4.编译二进制文件
                 let complie_cmd = format!(
-                    "{} -std=c++{} -O{} {} -o {}/{} -L{} -l{}",
+                    "{} -std=c++{} -O{} {} -o {}/{} -L{} -l{} -I{}",
                     project.complier.cxx,
                     project.complier.std,
                     project.complier.ol,
@@ -137,15 +151,30 @@ impl AllCommand {
                     project.target.name,
                     project.target.lib,
                     project.target.name,
+                    project.target.inc,
                 );
                 all_command.cmds.push(OneLineCommand::new(complie_cmd));
-            },
-            Mode::Dynamic=>{},
-            Mode::Invalid=>{
+            }
+            Mode::Dynamic => {}
+            Mode::Invalid => {
                 panic!("Unsupported mode!");
             }
         }
         all_command
     }
-
+    pub fn run(&self) {
+        let length = self.cmds.len();
+        //迭代所有命令
+        for (index, cmd) in self.cmds.iter().enumerate() {
+            //打印命令头部
+            println!(
+                "[{}/{}]:{}",
+                index.to_string().bg(green_cyan()),
+                length.to_string().bg(blue()),
+                cmd.meta_data
+            );
+            //执行
+            cmd.execute();
+        }
+    }
 }

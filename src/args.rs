@@ -9,6 +9,8 @@ use std::fs::File;
 use std::io::prelude::*;
 //终端彩色输出
 use ansi_rgb::{ red,green,Background };
+use crate::config;
+use crate::command;
 
 
 //定义project.toml标准模板
@@ -68,6 +70,14 @@ pub fn read_console_input(){
         },
         "init"=>{init_existed_project();},
         "help"=>{print_help_infomation();},
+        "build"=>{
+            let mut current_path=std::env::current_dir().unwrap();
+            current_path.push("project.toml");
+            //读取配置文件
+            let con=config::Project::new(&current_path);
+            let ac=command::AllCommand::new(&con);
+            ac.run();
+        },
         _=>{
             println!("{}","Unspported arguments!".bg(red()));
             print_help_infomation();
@@ -110,6 +120,18 @@ fn create_new_project(project_name:&String){
             current_path.push("src");
             fs::create_dir(&current_path).unwrap();
             println!("Creating {} directory successfully.","source".bg(green()));
+            //回退
+            current_path.pop();
+            //创建lib文件夹
+            current_path.push("lib");
+            fs::create_dir(&current_path).unwrap();
+            println!("Creating {} directory successfully.","lib".bg(green()));
+            //回退
+            current_path.pop();
+            //创建bin文件夹
+            current_path.push("bin");
+            fs::create_dir(&current_path).unwrap();
+            println!("Creating {} directory successfully.","bin".bg(green()));
             //回退
             current_path.pop();
             //写入project.toml文件
