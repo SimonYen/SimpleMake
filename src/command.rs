@@ -3,7 +3,7 @@
 */
 
 use crate::config::{Mode, Project};
-use ansi_rgb::{blue, green, green_cyan, red, Background};
+use ansi_rgb::{cyan_blue, green, red, Background};
 use std::{fs, io, process::Command};
 
 struct OneLineCommand {
@@ -167,12 +167,9 @@ impl AllCommand {
         //迭代所有命令
         for (index, cmd) in self.cmds.iter().enumerate() {
             //打印命令头部
-            println!(
-                "[{}/{}]:{}",
-                index.to_string().bg(green_cyan()),
-                length.to_string().bg(blue()),
-                cmd.meta_data
-            );
+            //优化打印效果
+            let header = format!("[{}/{}]", index, length);
+            println!("{}: {}", header.bg(cyan_blue()), cmd.meta_data.clone());
             //执行
             cmd.execute();
         }
