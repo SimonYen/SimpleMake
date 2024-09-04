@@ -3,8 +3,8 @@
 */
 
 use crate::config::{Mode, Project};
-use ansi_rgb::{cyan_blue, green, red, Background};
-use std::{fs, io, process::Command};
+use ansi_rgb::{cyan_blue, red, Background};
+use std::{fs, io, process::Command,process::Stdio};
 
 struct OneLineCommand {
     meta_data: String,
@@ -27,18 +27,21 @@ impl OneLineCommand {
     }
     //执行命令
     fn execute(&self) {
-        let output = Command::new(&self.bin)
+        Command::new(&self.bin)
             .args(self.args.clone())
-            .output()
+            //     .output()
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
             .expect(
                 format!("Excuting {} Failed", self.meta_data)
                     .bg(red())
                     .to_string()
                     .as_str(),
             );
-        // 将输出转换为字符串并打印
-        let result = String::from_utf8_lossy(&output.stdout);
-        println!("{}", result.bg(green()));
+        // // 将输出转换为字符串并打印
+        // let result = String::from_utf8_lossy(&output.stdout);
+        // println!("{}", result.bg(green()));
     }
 }
 
@@ -93,7 +96,7 @@ impl AllCommand {
                     current_path.push(".sm");
                     current_path.push(format!("{}.o", index));
                     //类似于这种命令 g++ -std=c++11 -Wall -O2 -c file.cpp -o .sm/file1.o
-                    let cmd = format!(
+                    let mut cmd = format!(
                         "{} -std=c++{} -O{} -c {} -o {}",
                         project.complier.cxx,
                         project.complier.std,
@@ -101,6 +104,12 @@ impl AllCommand {
                         src_file.to_str().unwrap(),
                         current_path.to_str().unwrap(),
                     );
+                    //判断是否添加-Wall参数
+                    if project.complier.wall {
+                        cmd.push_str(" -Wall ");
+                    }
+                    //添加额外参数
+                    cmd.push_str(project.complier.extra.join(" ").as_str());
                     //存入
                     all_command.cmds.push(OneLineCommand::new(cmd));
                     current_path.pop();
@@ -141,7 +150,7 @@ impl AllCommand {
                 current_path.pop();
                 current_path.push(project.target.bin.clone());
                 //4.编译二进制文件
-                let complie_cmd = format!(
+                let mut complie_cmd = format!(
                     "{} -std=c++{} -O{} {} -o {}/{} -L{} -l{} -I{}",
                     project.complier.cxx,
                     project.complier.std,
@@ -153,6 +162,16 @@ impl AllCommand {
                     project.target.name,
                     project.target.inc,
                 );
+                //判断是否添加-Wall参数
+                if project.complier.wall {
+                    complie_cmd.push_str(" -Wall ");
+                }
+                //链接系统的静态库
+                for l in project.complier.link.clone() {
+                    complie_cmd.push_str(format!(" -l{} ", l).as_str());
+                }
+                //添加额外的参数
+                complie_cmd.push_str(project.complier.extra.join(" ").as_str());
                 all_command.cmds.push(OneLineCommand::new(complie_cmd));
             }
             Mode::Dynamic => {}
