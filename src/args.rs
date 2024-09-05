@@ -7,6 +7,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
+use std::process::Command;
 //终端彩色输出
 use crate::command;
 use crate::config;
@@ -80,6 +81,33 @@ pub fn read_console_input() {
             let ac = command::AllCommand::new(&con);
             ac.run();
         }
+        "run" => {
+            let mut current_path = std::env::current_dir().unwrap();
+            current_path.push("project.toml");
+            //读取配置文件
+            let con = config::Project::new(&current_path);
+            current_path.pop();
+            //加载可执行目录
+            current_path.push(con.target.bin);
+            current_path.push(con.target.name);
+            let output = Command::new(current_path)
+                .output()
+                .expect(
+                    format!("Excuting {} Failed", "binary")
+                        .bg(red())
+                        .to_string()
+                        .as_str(),
+                );
+            //检测命令是否成功执行
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                //打印出来
+                println!("{}", stdout);
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                println!("{}", stderr.bg(red()));
+            }
+        }
         _ => {
             println!("{}", "Unspported arguments!".bg(red()));
             print_help_infomation();
@@ -95,7 +123,7 @@ fn print_help_infomation() {
     sm init                 Initializing a existed project.
     sm build                Building the project.
     sm run                  Building it, and running it.
-    sm clean                Clean up the project(deleting the bin and lib).
+    sm clean                Clean up the project(deleting the bin, lib, obj).
     sm help                 Printing the help infomation.
     "#;
     println!("{}", help_infomation);
