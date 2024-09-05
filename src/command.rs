@@ -4,7 +4,7 @@
 
 use crate::config::{Mode, Project};
 use ansi_rgb::{cyan_blue, red, Background};
-use std::{fs, io, process::Command,process::Stdio};
+use std::{fs, io, process::Command};
 
 struct OneLineCommand {
     meta_data: String,
@@ -27,21 +27,24 @@ impl OneLineCommand {
     }
     //执行命令
     fn execute(&self) {
-        Command::new(&self.bin)
+        let output = Command::new(&self.bin)
             .args(self.args.clone())
-            //     .output()
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
+            .output()
             .expect(
                 format!("Excuting {} Failed", self.meta_data)
                     .bg(red())
                     .to_string()
                     .as_str(),
             );
-        // // 将输出转换为字符串并打印
-        // let result = String::from_utf8_lossy(&output.stdout);
-        // println!("{}", result.bg(green()));
+        //检测命令是否成功执行
+        if output.status.success(){
+            let stdout=String::from_utf8_lossy(&output.stdout);
+            //打印出来
+            println!("{}",stdout);
+        }else{
+            let stderr=String::from_utf8_lossy(&output.stderr);
+            println!("{}",stderr.bg(red()));
+        }
     }
 }
 
