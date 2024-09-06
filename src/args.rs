@@ -55,6 +55,8 @@ pub fn read_console_input() {
         return;
     }
     let command = &args[1];
+    //获取当前目录
+    let mut current_path = std::env::current_dir().unwrap();
     //判断命令参数
     match command.as_str() {
         "new" => {
@@ -74,7 +76,6 @@ pub fn read_console_input() {
             print_help_infomation();
         }
         "build" => {
-            let mut current_path = std::env::current_dir().unwrap();
             current_path.push("project.toml");
             //读取配置文件
             let con = config::Project::new(&current_path);
@@ -82,7 +83,9 @@ pub fn read_console_input() {
             ac.run();
         }
         "run" => {
-            let mut current_path = std::env::current_dir().unwrap();
+            /*
+                这里日后需要大改，需要判断源代码改变来判断是否需要重新编译再运行
+            */
             current_path.push("project.toml");
             //读取配置文件
             let con = config::Project::new(&current_path);
@@ -90,14 +93,12 @@ pub fn read_console_input() {
             //加载可执行目录
             current_path.push(con.target.bin);
             current_path.push(con.target.name);
-            let output = Command::new(current_path)
-                .output()
-                .expect(
-                    format!("Excuting {} Failed", "binary")
-                        .bg(red())
-                        .to_string()
-                        .as_str(),
-                );
+            let output = Command::new(current_path).output().expect(
+                format!("Excuting {} Failed", "binary")
+                    .bg(red())
+                    .to_string()
+                    .as_str(),
+            );
             //检测命令是否成功执行
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -107,6 +108,19 @@ pub fn read_console_input() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 println!("{}", stderr.bg(red()));
             }
+        }
+        "clean" => {
+            current_path.push("project.toml");
+            //读取配置文件
+            let con = config::Project::new(&current_path);
+            current_path.pop();
+            //删除.sm bin下面的所有文件
+            current_path.push(".sm");
+            fs::remove_dir_all(&current_path).expect(".sm does not exist, ignoring it.");
+            current_path.pop();
+            current_path.push(&con.target.bin);
+            fs::remove_dir_all(current_path)
+                .expect(format!("{} does not exist, ignoring it.", con.target.bin).as_str());
         }
         _ => {
             println!("{}", "Unspported arguments!".bg(red()));
@@ -123,7 +137,7 @@ fn print_help_infomation() {
     sm init                 Initializing a existed project.
     sm build                Building the project.
     sm run                  Building it, and running it.
-    sm clean                Clean up the project(deleting the bin, lib, obj).
+    sm clean                Clean up the project(deleting the bin, obj).
     sm help                 Printing the help infomation.
     "#;
     println!("{}", help_infomation);

@@ -4,7 +4,12 @@
 
 use crate::config::{Mode, Project};
 use ansi_rgb::{cyan_blue, red, Background};
-use std::{fs, io, process::Command};
+use std::{
+    fs,
+    io,
+    path::PathBuf,
+    process::Command,
+};
 
 struct OneLineCommand {
     meta_data: String,
@@ -25,32 +30,48 @@ impl OneLineCommand {
             args: words[1..].to_vec(),
         };
     }
-    //执行命令
-    fn execute(&self) {
-        let output = Command::new(&self.bin)
-            .args(self.args.clone())
-            .output()
-            .expect(
-                format!("Excuting {} Failed", self.meta_data)
-                    .bg(red())
-                    .to_string()
-                    .as_str(),
-            );
+    //执行命令，wait参数为true，等需要等待这个子进程执行完毕
+    fn execute(&self, wait: bool) {
+        let output = if wait {
+            let child = Command::new(&self.bin)
+                .args(self.args.clone())
+                .spawn()
+                .expect(
+                    format!("Excuting {} Failed", self.meta_data)
+                        .bg(red())
+                        .to_string()
+                        .as_str(),
+                );
+            child.wait_with_output().unwrap()
+        } else {
+            Command::new(&self.bin)
+                .args(self.args.clone())
+                .output()
+                .expect(
+                    format!("Excuting {} Failed", self.meta_data)
+                        .bg(red())
+                        .to_string()
+                        .as_str(),
+                )
+        };
         //检测命令是否成功执行
-        if output.status.success(){
-            let stdout=String::from_utf8_lossy(&output.stdout);
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
             //打印出来
-            println!("{}",stdout);
-        }else{
-            let stderr=String::from_utf8_lossy(&output.stderr);
-            println!("{}",stderr.bg(red()));
+            println!("{}", stdout);
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            println!("{}", stderr.bg(red()));
         }
     }
 }
 
 //所有需要执行的命令
 pub struct AllCommand {
-    cmds: Vec<OneLineCommand>,
+    //命令需要细分，先编译目标文件，然后再打包成库，最后才是可执行文件
+    obj_cmds: Vec<OneLineCommand>,
+    lib_cmd: OneLineCommand,
+    bin_cmd: OneLineCommand,
 }
 
 impl AllCommand {
@@ -66,29 +87,23 @@ impl AllCommand {
         }
         //这个构造函数实现很重要，需要慢慢写
         let mut all_command = AllCommand {
-            cmds: Vec::<OneLineCommand>::new(),
+            obj_cmds: Vec::<OneLineCommand>::new(),
+            lib_cmd: OneLineCommand::new("ls".to_string()),
+            bin_cmd: OneLineCommand::new("ls".to_string()),
         };
         //获取当前路径
         let mut current_path = std::env::current_dir().unwrap();
         //获取所有源文件
         let src_files = project.get_src_files();
         current_path.push(".sm");
-        //0.创建.sm文件夹
-        match fs::metadata(current_path.clone()) {
-            Ok(metadata) => {
-                if metadata.is_file() {
-                    panic!("A file named .sm!");
-                }
-            }
-            Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                // 目录不存在，创建它
-                fs::create_dir(current_path.clone()).unwrap();
-            }
-            Err(e) => {
-                // 处理其他错误
-                eprintln!("{}", e);
-            }
-        }
+        //0.创建必要的文件夹
+        mkdir(&current_path);
+        current_path.pop();
+        current_path.push(&project.target.lib);
+        mkdir(&current_path);
+        current_path.pop();
+        current_path.push(&project.target.bin);
+        mkdir(&current_path);
         current_path.pop();
         match project.get_mode() {
             //编译为静态库时
@@ -114,14 +129,14 @@ impl AllCommand {
                     //添加额外参数
                     cmd.push_str(project.complier.extra.join(" ").as_str());
                     //存入
-                    all_command.cmds.push(OneLineCommand::new(cmd));
+                    all_command.obj_cmds.push(OneLineCommand::new(cmd));
                     current_path.pop();
                     current_path.pop();
                 }
                 //2.收集所有目标文件
                 current_path.push(".sm");
                 let mut obj_files: Vec<String> = Vec::new();
-                for entry in fs::read_dir(current_path.clone()).unwrap() {
+                for entry in fs::read_dir(&current_path).unwrap() {
                     //如果是文件
                     match entry {
                         Ok(en) => {
@@ -138,7 +153,7 @@ impl AllCommand {
                     }
                 }
                 current_path.pop();
-                current_path.push(project.target.lib.clone());
+                current_path.push(&project.target.lib);
                 //3.打包成静态库
                 let mut ar_cmd = format!(
                     "ar rcs {}/lib{}.a ",
@@ -149,9 +164,9 @@ impl AllCommand {
                     ar_cmd.push_str(&obj_file);
                     ar_cmd.push(' ');
                 }
-                all_command.cmds.push(OneLineCommand::new(ar_cmd));
+                all_command.lib_cmd = OneLineCommand::new(ar_cmd);
                 current_path.pop();
-                current_path.push(project.target.bin.clone());
+                current_path.push(&project.target.bin);
                 //4.编译二进制文件
                 let mut complie_cmd = format!(
                     "{} -std=c++{} -O{} {} -o {}/{} -L{} -l{} -I{}",
@@ -170,12 +185,12 @@ impl AllCommand {
                     complie_cmd.push_str(" -Wall ");
                 }
                 //链接系统的静态库
-                for l in project.complier.link.clone() {
+                for l in &project.complier.link {
                     complie_cmd.push_str(format!(" -l{} ", l).as_str());
                 }
                 //添加额外的参数
                 complie_cmd.push_str(project.complier.extra.join(" ").as_str());
-                all_command.cmds.push(OneLineCommand::new(complie_cmd));
+                all_command.bin_cmd = OneLineCommand::new(complie_cmd);
             }
             Mode::Dynamic => {}
             Mode::Invalid => {
@@ -185,15 +200,54 @@ impl AllCommand {
         all_command
     }
     pub fn run(&self) {
-        let length = self.cmds.len();
+        let length = self.obj_cmds.len() + 2;
         //迭代所有命令
-        for (index, cmd) in self.cmds.iter().enumerate() {
-            //打印命令头部
-            //优化打印效果
-            let header = format!("[{}/{}]", index, length);
-            println!("{}: {}", header.bg(cyan_blue()), cmd.meta_data.clone());
+        for (index, cmd) in self.obj_cmds.iter().enumerate() {
+            let header = format!("[{}/{}]", index + 1, length);
+            println!("{}: {}", header.bg(cyan_blue()), &cmd.meta_data);
             //执行
-            cmd.execute();
+            if index == self.obj_cmds.len() - 1 {
+                cmd.execute(true);
+            } else {
+                cmd.execute(false);
+            }
+        }
+        let header = format!("[{}/{}]", length - 1, length);
+        println!("{}: {}", header.bg(cyan_blue()), self.lib_cmd.meta_data);
+        //执行
+        self.lib_cmd.execute(true);
+        let header = format!("[{}/{}]", length, length);
+        println!("{}: {}", header.bg(cyan_blue()), &self.bin_cmd.meta_data);
+        //执行
+        self.bin_cmd.execute(true);
+    }
+}
+
+//功能性函数，创建文件夹
+fn mkdir(p: &PathBuf) {
+    match fs::metadata(p) {
+        Ok(metadata) => {
+            if metadata.is_file() {
+                panic!("Naming conflict!");
+            }
+        }
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+            // 目录不存在，创建它
+            match fs::create_dir(p) {
+                Ok(_) => {
+                    println!("Creating {} directory successfully.", p.to_str().unwrap())
+                }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                    println!("Skipping {}", p.to_str().unwrap());
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                }
+            }
+        }
+        Err(e) => {
+            // 处理其他错误
+            eprintln!("{}", e);
         }
     }
 }
