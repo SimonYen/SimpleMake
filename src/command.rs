@@ -4,12 +4,18 @@
 
 use crate::config::{Mode, Project};
 use ansi_rgb::{cyan_blue, red, Background};
-use std::{
-    fs,
-    io,
-    path::PathBuf,
-    process::Command,
-};
+use std::{fs, io, path::PathBuf, process::Command};
+
+//有限状态机
+#[derive(PartialEq)]
+enum State {
+    Start,
+    Failed,
+    Obj,
+    Lib,
+    Bin,
+    End,
+}
 
 struct OneLineCommand {
     meta_data: String,
@@ -31,7 +37,7 @@ impl OneLineCommand {
         };
     }
     //执行命令，wait参数为true，等需要等待这个子进程执行完毕
-    fn execute(&self, wait: bool) {
+    fn execute(&self, wait: bool) -> bool {
         let output = if wait {
             let child = Command::new(&self.bin)
                 .args(self.args.clone())
@@ -59,9 +65,11 @@ impl OneLineCommand {
             let stdout = String::from_utf8_lossy(&output.stdout);
             //打印出来
             println!("{}", stdout);
+            true
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
             println!("{}", stderr.bg(red()));
+            false
         }
     }
 }
@@ -72,6 +80,8 @@ pub struct AllCommand {
     obj_cmds: Vec<OneLineCommand>,
     lib_cmd: OneLineCommand,
     bin_cmd: OneLineCommand,
+    //试试引入状态机写法
+    state: State,
 }
 
 impl AllCommand {
@@ -90,6 +100,7 @@ impl AllCommand {
             obj_cmds: Vec::<OneLineCommand>::new(),
             lib_cmd: OneLineCommand::new("ls".to_string()),
             bin_cmd: OneLineCommand::new("ls".to_string()),
+            state: State::Start,
         };
         //获取当前路径
         let mut current_path = std::env::current_dir().unwrap();
@@ -199,27 +210,71 @@ impl AllCommand {
         }
         all_command
     }
-    pub fn run(&self) {
+    pub fn run(&mut self) {
         let length = self.obj_cmds.len() + 2;
-        //迭代所有命令
-        for (index, cmd) in self.obj_cmds.iter().enumerate() {
-            let header = format!("[{}/{}]", index + 1, length);
-            println!("{}: {}", header.bg(cyan_blue()), &cmd.meta_data);
-            //执行
-            if index == self.obj_cmds.len() - 1 {
-                cmd.execute(true);
-            } else {
-                cmd.execute(false);
+        //FSM，有限状态机
+        while self.state != State::End {
+            match self.state {
+                //初始状态，需要编译源代码为目标文件，切换状态为obj
+                State::Start => {
+                    self.state = State::Obj;
+                }
+                //失败状态，输出提示信息，并切换状态为结束状态
+                State::Failed => {
+                    println!("{}", "Command aborting!".bg(red()));
+                    self.state = State::End;
+                }
+                State::End => {}
+                //obj状态，编译源代码
+                State::Obj => {
+                    let mut result = true;
+                    for (index, cmd) in self.obj_cmds.iter().enumerate() {
+                        let header = format!("[{}/{}]", index + 1, length);
+                        println!("{}: {}", header.bg(cyan_blue()), &cmd.meta_data);
+                        let tmp: bool;
+                        //执行
+                        if index == self.obj_cmds.len() - 1 {
+                            tmp = cmd.execute(true);
+                        } else {
+                            tmp = cmd.execute(false);
+                        }
+                        //检查是否执行成功
+                        if !tmp {
+                            result = false;
+                            break;
+                        }
+                    }
+                    if result {
+                        //成功执行，没有报错，切换下一个状态
+                        self.state = State::Lib;
+                    } else {
+                        self.state = State::Failed;
+                    }
+                }
+                //lib状态，打包成库
+                State::Lib => {
+                    let header = format!("[{}/{}]", length - 1, length);
+                    println!("{}: {}", header.bg(cyan_blue()), self.lib_cmd.meta_data);
+                    //执行
+                    if self.lib_cmd.execute(true) {
+                        self.state = State::Bin;
+                    } else {
+                        self.state = State::Failed;
+                    }
+                }
+                //bin状态，编译成二进制文件
+                State::Bin => {
+                    let header = format!("[{}/{}]", length, length);
+                    println!("{}: {}", header.bg(cyan_blue()), &self.bin_cmd.meta_data);
+                    //执行
+                    if self.bin_cmd.execute(true) {
+                        self.state = State::End;
+                    } else {
+                        self.state = State::Failed;
+                    }
+                }
             }
         }
-        let header = format!("[{}/{}]", length - 1, length);
-        println!("{}: {}", header.bg(cyan_blue()), self.lib_cmd.meta_data);
-        //执行
-        self.lib_cmd.execute(true);
-        let header = format!("[{}/{}]", length, length);
-        println!("{}: {}", header.bg(cyan_blue()), &self.bin_cmd.meta_data);
-        //执行
-        self.bin_cmd.execute(true);
     }
 }
 

@@ -79,7 +79,7 @@ pub fn read_console_input() {
             current_path.push("project.toml");
             //读取配置文件
             let con = config::Project::new(&current_path);
-            let ac = command::AllCommand::new(&con);
+            let mut ac = command::AllCommand::new(&con);
             ac.run();
         }
         "run" => {
