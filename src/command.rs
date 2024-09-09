@@ -4,7 +4,8 @@
 
 use crate::config::{Mode, Project};
 use ansi_rgb::{cyan_blue, red, Background};
-use std::{fs, io, path::PathBuf, process::Command};
+use duct::cmd;
+use std::{fs, io, path::PathBuf};
 
 //有限状态机
 #[derive(PartialEq)]
@@ -26,7 +27,7 @@ struct OneLineCommand {
 impl OneLineCommand {
     fn new(data: String) -> OneLineCommand {
         //分解成为程序和参数
-        let words: Vec<String> = data
+        let words: Vec<_> = data
             .split_ascii_whitespace()
             .map(|w| w.to_string())
             .collect();
@@ -36,40 +37,26 @@ impl OneLineCommand {
             args: words[1..].to_vec(),
         };
     }
-    //执行命令，wait参数为true，等需要等待这个子进程执行完毕
-    fn execute(&self, wait: bool) -> bool {
-        let output = if wait {
-            let child = Command::new(&self.bin)
-                .args(self.args.clone())
-                .spawn()
-                .expect(
-                    format!("Excuting {} Failed", self.meta_data)
-                        .bg(red())
-                        .to_string()
-                        .as_str(),
-                );
-            child.wait_with_output().unwrap()
-        } else {
-            Command::new(&self.bin)
-                .args(self.args.clone())
-                .output()
-                .expect(
-                    format!("Excuting {} Failed", self.meta_data)
-                        .bg(red())
-                        .to_string()
-                        .as_str(),
-                )
-        };
-        //检测命令是否成功执行
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            //打印出来
-            println!("{}", stdout);
-            true
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("{}", stderr.bg(red()));
-            false
+    //阻塞执行命令
+    fn execute(&self) -> bool {
+        match cmd(&self.bin, &self.args).run() {
+            Ok(output) => {
+                //检测命令是否成功执行
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    //打印出来
+                    println!("{}", stdout);
+                    true
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    println!("{}", stderr.bg(red()));
+                    false
+                }
+            }
+            Err(e) => {
+                eprintln!("Excuting {} Failed: {}", self.meta_data, e);
+                false
+            }
         }
     }
 }
@@ -80,7 +67,6 @@ pub struct AllCommand {
     obj_cmds: Vec<OneLineCommand>,
     lib_cmd: OneLineCommand,
     bin_cmd: OneLineCommand,
-    //试试引入状态机写法
     state: State,
 }
 
@@ -213,7 +199,7 @@ impl AllCommand {
     pub fn run(&mut self) {
         let length = self.obj_cmds.len() + 2;
         //FSM，有限状态机
-        while self.state != State::End {
+        loop {
             match self.state {
                 //初始状态，需要编译源代码为目标文件，切换状态为obj
                 State::Start => {
@@ -224,20 +210,17 @@ impl AllCommand {
                     println!("{}", "Command aborting!".bg(red()));
                     self.state = State::End;
                 }
-                State::End => {}
+                State::End => {
+                    break;
+                }
                 //obj状态，编译源代码
                 State::Obj => {
                     let mut result = true;
                     for (index, cmd) in self.obj_cmds.iter().enumerate() {
                         let header = format!("[{}/{}]", index + 1, length);
                         println!("{}: {}", header.bg(cyan_blue()), &cmd.meta_data);
-                        let tmp: bool;
                         //执行
-                        if index == self.obj_cmds.len() - 1 {
-                            tmp = cmd.execute(true);
-                        } else {
-                            tmp = cmd.execute(false);
-                        }
+                        let tmp = cmd.execute();
                         //检查是否执行成功
                         if !tmp {
                             result = false;
@@ -256,7 +239,7 @@ impl AllCommand {
                     let header = format!("[{}/{}]", length - 1, length);
                     println!("{}: {}", header.bg(cyan_blue()), self.lib_cmd.meta_data);
                     //执行
-                    if self.lib_cmd.execute(true) {
+                    if self.lib_cmd.execute() {
                         self.state = State::Bin;
                     } else {
                         self.state = State::Failed;
@@ -267,7 +250,7 @@ impl AllCommand {
                     let header = format!("[{}/{}]", length, length);
                     println!("{}: {}", header.bg(cyan_blue()), &self.bin_cmd.meta_data);
                     //执行
-                    if self.bin_cmd.execute(true) {
+                    if self.bin_cmd.execute() {
                         self.state = State::End;
                     } else {
                         self.state = State::Failed;

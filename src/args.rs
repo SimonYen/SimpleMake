@@ -119,8 +119,12 @@ pub fn read_console_input() {
             fs::remove_dir_all(&current_path).expect(".sm does not exist, ignoring it.");
             current_path.pop();
             current_path.push(&con.target.bin);
-            fs::remove_dir_all(current_path)
-                .expect(format!("{} does not exist, ignoring it.", con.target.bin).as_str());
+            fs::remove_dir_all(&current_path)
+                .expect(format!("{} does not exist, ignoring it.", &con.target.bin).as_str());
+            // current_path.pop();
+            // current_path.push(&con.target.lib);
+            // fs::remove_dir_all(&current_path)
+            //     .expect(format!("{} does not exist, ignoring it.", &con.target.lib).as_str());
         }
         _ => {
             println!("{}", "Unspported arguments!".bg(red()));
