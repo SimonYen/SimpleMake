@@ -68,6 +68,7 @@ pub struct AllCommand {
     lib_cmd: OneLineCommand,
     bin_cmd: OneLineCommand,
     state: State,
+    mode: Mode,
 }
 
 impl AllCommand {
@@ -87,6 +88,7 @@ impl AllCommand {
             lib_cmd: OneLineCommand::new("ls".to_string()),
             bin_cmd: OneLineCommand::new("ls".to_string()),
             state: State::Start,
+            mode: Mode::Invalid,
         };
         //获取当前路径
         let mut current_path = std::env::current_dir().unwrap();
@@ -102,7 +104,8 @@ impl AllCommand {
         current_path.push(&project.target.bin);
         mkdir(&current_path);
         current_path.pop();
-        match project.get_mode() {
+        all_command.mode = project.get_mode();
+        match all_command.mode {
             //编译为静态库时
             Mode::Static => {
                 //1.将所有源文件编译成目标文件
@@ -189,7 +192,56 @@ impl AllCommand {
                 complie_cmd.push_str(project.complier.extra.join(" ").as_str());
                 all_command.bin_cmd = OneLineCommand::new(complie_cmd);
             }
-            Mode::Dynamic => {}
+            Mode::Dynamic => {
+                let srcs: Vec<_> = src_files
+                    .iter()
+                    .map(|s| s.to_str().unwrap().to_string())
+                    .collect();
+                let srcs = srcs.join(" ");
+                current_path.push(&project.target.lib);
+                //1.源代码直接生成动态库文件
+                let mut lib_cmd = format!(
+                    "{} -shared -fPIC -std=c++{} -O{} {} -o {}/lib{}.so",
+                    project.complier.cxx,
+                    project.complier.std,
+                    project.complier.ol,
+                    srcs,
+                    current_path.to_str().unwrap().to_string(),
+                    project.target.name,
+                );
+                current_path.pop();
+                //判断是否添加-Wall参数
+                if project.complier.wall {
+                    lib_cmd.push_str(" -Wall ");
+                }
+                //添加额外的参数
+                lib_cmd.push_str(project.complier.extra.join(" ").as_str());
+                all_command.lib_cmd = OneLineCommand::new(lib_cmd);
+                //2.编译二进制文件
+                let mut complie_cmd = format!(
+                    "{} -std=c++{} -O{} {} -o {}/{} -L{} -l{} -I{}",
+                    project.complier.cxx,
+                    project.complier.std,
+                    project.complier.ol,
+                    project.target.entrance,
+                    current_path.to_str().unwrap().to_string(),
+                    project.target.name,
+                    project.target.lib,
+                    project.target.name,
+                    project.target.inc,
+                );
+                //判断是否添加-Wall参数
+                if project.complier.wall {
+                    complie_cmd.push_str(" -Wall ");
+                }
+                //链接系统的静态库
+                for l in &project.complier.link {
+                    complie_cmd.push_str(format!(" -l{} ", l).as_str());
+                }
+                //添加额外的参数
+                complie_cmd.push_str(project.complier.extra.join(" ").as_str());
+                all_command.bin_cmd = OneLineCommand::new(complie_cmd);
+            }
             Mode::Invalid => {
                 panic!("Unsupported mode!");
             }
@@ -197,6 +249,19 @@ impl AllCommand {
         all_command
     }
     pub fn run(&mut self) {
+        match self.mode {
+            Mode::Static => {
+                self.sta_run();
+            }
+            Mode::Dynamic => {
+                self.dyn_run();
+            }
+            Mode::Invalid => {
+                panic!("Unsupported mode!");
+            }
+        }
+    }
+    fn sta_run(&mut self) {
         let length = self.obj_cmds.len() + 2;
         //FSM，有限状态机
         loop {
@@ -255,6 +320,48 @@ impl AllCommand {
                     } else {
                         self.state = State::Failed;
                     }
+                }
+            }
+        }
+    }
+    fn dyn_run(&mut self) {
+        let length = self.obj_cmds.len() + 2;
+        //FSM，有限状态机
+        loop {
+            match self.state {
+                //初始状态，需要编译源代码为动态库文件，切换状态为lib
+                State::Start => {
+                    self.state = State::Lib;
+                }
+                //失败状态，输出提示信息，并切换状态为结束状态
+                State::Failed => {
+                    println!("{}", "Command aborting!".bg(red()));
+                    self.state = State::End;
+                }
+                //lib状态，打包成库
+                State::Lib => {
+                    let header = format!("[{}/{}]", length - 1, length);
+                    println!("{}: {}", header.bg(cyan_blue()), self.lib_cmd.meta_data);
+                    //执行
+                    if self.lib_cmd.execute() {
+                        self.state = State::Bin;
+                    } else {
+                        self.state = State::Failed;
+                    }
+                }
+                //bin状态，编译成二进制文件
+                State::Bin => {
+                    let header = format!("[{}/{}]", length, length);
+                    println!("{}: {}", header.bg(cyan_blue()), &self.bin_cmd.meta_data);
+                    //执行
+                    if self.bin_cmd.execute() {
+                        self.state = State::End;
+                    } else {
+                        self.state = State::Failed;
+                    }
+                }
+                _ => {
+                    break;
                 }
             }
         }
