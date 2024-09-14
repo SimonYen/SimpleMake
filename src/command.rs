@@ -214,6 +214,7 @@ impl AllCommand {
                 if project.complier.wall {
                     lib_cmd.push_str(" -Wall ");
                 }
+                current_path.push(&project.target.bin);
                 //添加额外的参数
                 lib_cmd.push_str(project.complier.extra.join(" ").as_str());
                 all_command.lib_cmd = OneLineCommand::new(lib_cmd);
