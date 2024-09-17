@@ -115,12 +115,13 @@ impl AllCommand {
                     current_path.push(format!("{}.o", index));
                     //类似于这种命令 g++ -std=c++11 -Wall -O2 -c file.cpp -o .sm/file1.o
                     let mut cmd = format!(
-                        "{} -std=c++{} -O{} -c {} -o {}",
+                        "{} -std=c++{} -O{} -c {} -o {} -I{}",
                         project.complier.cxx,
                         project.complier.std,
                         project.complier.ol,
                         src_file.to_str().unwrap(),
                         current_path.to_str().unwrap(),
+                        project.target.inc,
                     );
                     //判断是否添加-Wall参数
                     if project.complier.wall {
@@ -201,13 +202,14 @@ impl AllCommand {
                 current_path.push(&project.target.lib);
                 //1.源代码直接生成动态库文件
                 let mut lib_cmd = format!(
-                    "{} -shared -fPIC -std=c++{} -O{} {} -o {}/lib{}.so",
+                    "{} -shared -fPIC -std=c++{} -O{} {} -o {}/lib{}.so -I{}",
                     project.complier.cxx,
                     project.complier.std,
                     project.complier.ol,
                     srcs,
                     current_path.to_str().unwrap().to_string(),
                     project.target.name,
+                    project.target.inc,
                 );
                 current_path.pop();
                 //判断是否添加-Wall参数
